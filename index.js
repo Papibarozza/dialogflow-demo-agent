@@ -4,7 +4,7 @@ require("dotenv").config();
 const {fb_carousel, fb_carousel_card,fb_suggestions} = require("./lib/facebook_include.js");
 const express = require("express");
 const bodyParser = require("body-parser");
-const { WebhookClient, Suggestion, Card,Text, Payload } = require("dialogflow-fulfillment");
+const { WebhookClient,Text, Payload } = require("dialogflow-fulfillment");
 const morgan = require("morgan");
 const app = express();
 const request = require("request");
@@ -85,7 +85,52 @@ app.post("/webhook", (req,res) => {
         response: res});
     agent.requestSource = agent.FACEBOOK;
     let intentMap = new Map();
+    /*    
+    if(agent.context.get("restart_conv_ctx") != undefined){
+        console.log(agent.context.get("restart_conv_ctx"));
+        setTimeout(() =>{
+            console.log("Sending post");
+            request.post(
+                "https://graph.facebook.com/v2.6/me/messages?access_token="+process.env.FB_ACCESS_TOKEN,
+                { json: {
+                    
+                    "messaging_type": "RESPONSE",
+                    "recipient": {
+                        "id": recipientID
+                    },
+                    "message": {
+                        "text": "Hoppas jag kunde hjälpa dig! Om du vill kan jag sammanställa en ny lista åt dig om vi börjar om :). Du vet hur det går till, välj en av produkterna så kör vi!",
+                        "quick_replies":[
+                            {
+                                "content_type":"text",
+                                "title":"Lakrits",
+                                "payload":"Lakrits"
+                            },{
+                                "content_type":"text",
+                                "title":"Choklad",
+                                "payload":"Choklad"
+                            },
+                            {
+                                "content_type":"text",
+                                "title":"Karamell",
+                                "payload":"Karamell"
+                            }
+                        ]
+                    }     
+                },
+                function (error, response, body) {
+                    if (!error && response.statusCode == 200) {
+                        console.log("Sucessfully posted to url");
+                    }else{
+                        console.log(error);
+                    }
+                }
+                });
+        }, 5000);
         
+    }
+       */
+
     intentMap.set("debug.reset-ctx",(agent) => {
         agent.contexts.forEach((ctx) => {
             agent.context.set({"name":ctx.name,"lifespan":0});
@@ -255,17 +300,31 @@ app.post("/webhook", (req,res) => {
 
         agent.add(payload);
     });
+
+    
+
     if(process.env.DEBUG === "FALSE"){
         sendSeen(recipientID);
         setTimeout(function(){
             sendOnTyping(recipientID);
         },1000);
-    
+        const t1 = (new Date()).getTime();
+        const result = intentMap.get(agent.intent)(agent);
+        const t2 = (new Date()).getTime();
+        const diff = t2-t1;
         setTimeout(function(){
-            agent.handleRequest(intentMap);
-        },1500);
+            //agent.handleRequest(intentMap);
+            // eslint-disable-next-line no-unused-vars
+            agent.handleRequest((_agent) => {
+                return result; //Idea is that the values are calculated before and then we send the response via handleRequest.
+            });
+        },Math.max(0,1500-diff));
     }else{
-        agent.handleRequest(intentMap);
+        const result = intentMap.get(agent.intent)(agent);
+        // eslint-disable-next-line no-unused-vars
+        agent.handleRequest((_agent) => {
+            return result;
+        });
     }
     //agent.handleRequest(intentMap);
     //agent.handleRequest(intentMap);
